@@ -5,14 +5,17 @@ pipeline {
 
     environment {
         IMAGE_NAME = 'Zaid2044/spring-petclinic'
-        IMAGE_TAG = 'latest'
+        IMAGE_TAG  = 'latest'
+
+        // Reduce Java memory usage on t3.micro
+        MAVEN_OPTS = '-Xms128m -Xmx512m'
     }
 
     stages {
 
         stage('Checkout Source') {
             steps {
-                echo "Checking out source code..."
+                echo 'Checking out source code...'
                 checkout scm
             }
         }
@@ -53,21 +56,28 @@ pipeline {
 
                     echo "===== Git ====="
                     git --version
+
+                    echo "===== Memory ====="
+                    free -h
                 '''
             }
         }
 
         stage('Build Application') {
             steps {
-                echo "Building Application (Skipping Tests)..."
+                echo "Building Application..."
+
                 sh '''
-                    ./mvnw clean package -DskipTests
+                    ./mvnw clean package \
+                        -DskipTests \
+                        -Dcyclonedx.skip=true
                 '''
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
+
                 withCredentials([
                     string(
                         credentialsId: 'sonarqube-token',
@@ -80,10 +90,12 @@ pipeline {
                         sh '''
                             ./mvnw sonar:sonar \
                                 -DskipTests \
+                                -Dcyclonedx.skip=true \
                                 -Dsonar.projectKey=spring-petclinic \
                                 -Dsonar.login=$SONAR_TOKEN
                         '''
                     }
+
                 }
             }
         }
@@ -98,7 +110,6 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo "Building Docker Image..."
 
                 sh '''
                     docker build \
@@ -108,7 +119,9 @@ pipeline {
         }
 
         stage('Docker Hub Login') {
+
             steps {
+
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub-creds',
@@ -122,17 +135,19 @@ pipeline {
                             -u "$DOCKER_USER" \
                             --password-stdin
                     '''
+
                 }
             }
         }
 
         stage('Push Docker Image') {
+
             steps {
-                echo "Pushing Docker Image..."
 
                 sh '''
                     docker push ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
+
             }
         }
     }
@@ -140,20 +155,29 @@ pipeline {
     post {
 
         success {
-            echo "========================================="
-            echo "CI Pipeline Completed Successfully!"
-            echo "Docker Image: ${IMAGE_NAME}:${IMAGE_TAG}"
-            echo "========================================="
+
+            echo "===================================="
+            echo "Pipeline completed successfully!"
+            echo "Docker Image:"
+            echo "${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "===================================="
+
         }
 
         failure {
-            echo "========================================="
-            echo "CI Pipeline Failed!"
-            echo "========================================="
+
+            echo "===================================="
+            echo "Pipeline Failed!"
+            echo "===================================="
+
         }
 
         always {
-            sh 'docker logout || true'
+
+            sh '''
+                docker logout || true
+            '''
+
         }
     }
 }
