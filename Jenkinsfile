@@ -38,6 +38,7 @@ pipeline {
             docker --version
         '''
     }
+    
 }
 
         stage('Verify Environment') {
