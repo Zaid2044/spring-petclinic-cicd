@@ -16,30 +16,28 @@ pipeline {
                 checkout scm
             }
         }
+
         stage('Install Dependencies') {
-    steps {
-        sh '''
-            sudo apt update
+            steps {
+                sh '''
+                    sudo apt update
 
-            sudo apt install -y \
-                git \
-                docker.io \
-                openjdk-21-jdk \
-                unzip \
-                curl
+                    sudo apt install -y \
+                        git \
+                        docker.io \
+                        openjdk-21-jdk \
+                        unzip \
+                        curl
 
-            sudo usermod -aG docker ubuntu || true
+                    sudo systemctl enable docker
+                    sudo systemctl start docker
 
-            sudo systemctl enable docker
-            sudo systemctl start docker
-
-            java -version
-            git --version
-            docker --version
-        '''
-    }
-    
-}
+                    java -version
+                    git --version
+                    docker --version
+                '''
+            }
+        }
 
         stage('Verify Environment') {
             steps {
@@ -61,24 +59,35 @@ pipeline {
 
         stage('Build Application') {
             steps {
-                echo "Building Spring PetClinic..."
+                echo "Building Application..."
                 sh './mvnw clean compile'
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                echo "Running Unit Tests..."
+                sh './mvnw test'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    def scannerHome = tool 'SonarQubeScanner'
+                withCredentials([
+                    string(
+                        credentialsId: 'sonarqube-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
 
                     withSonarQubeEnv('SonarQube') {
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=spring-petclinic \
-                            -Dsonar.projectName=Spring-PetClinic \
-                            -Dsonar.sources=src \
-                            -Dsonar.java.binaries=target/classes
-                        """
+
+                        sh '''
+                            ./mvnw clean verify sonar:sonar \
+                              -Dsonar.projectKey=spring-petclinic \
+                              -Dsonar.login=$SONAR_TOKEN
+                        '''
+
                     }
                 }
             }
@@ -94,11 +103,10 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo "Building Docker Image..."
-                sh """
+                sh '''
                     docker build \
                     -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                """
+                '''
             }
         }
 
@@ -111,20 +119,22 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
+
                     sh '''
                         echo "$DOCKER_PASS" | docker login \
                         -u "$DOCKER_USER" \
                         --password-stdin
                     '''
+
                 }
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                sh """
+                sh '''
                     docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                """
+                '''
             }
         }
 
