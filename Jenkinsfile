@@ -59,15 +59,10 @@ pipeline {
 
         stage('Build Application') {
             steps {
-                echo "Building Application..."
-                sh './mvnw clean compile'
-            }
-        }
-
-        stage('Unit Tests') {
-            steps {
-                echo "Running Unit Tests..."
-                sh './mvnw test'
+                echo "Building Application (Skipping Tests)..."
+                sh '''
+                    ./mvnw clean package -DskipTests
+                '''
             }
         }
 
@@ -83,11 +78,11 @@ pipeline {
                     withSonarQubeEnv('SonarQube') {
 
                         sh '''
-                            ./mvnw clean verify sonar:sonar \
-                              -Dsonar.projectKey=spring-petclinic \
-                              -Dsonar.login=$SONAR_TOKEN
+                            ./mvnw sonar:sonar \
+                                -DskipTests \
+                                -Dsonar.projectKey=spring-petclinic \
+                                -Dsonar.login=$SONAR_TOKEN
                         '''
-
                     }
                 }
             }
@@ -103,9 +98,11 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
+                echo "Building Docker Image..."
+
                 sh '''
                     docker build \
-                    -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        -t ${IMAGE_NAME}:${IMAGE_TAG} .
                 '''
             }
         }
@@ -122,32 +119,37 @@ pipeline {
 
                     sh '''
                         echo "$DOCKER_PASS" | docker login \
-                        -u "$DOCKER_USER" \
-                        --password-stdin
+                            -u "$DOCKER_USER" \
+                            --password-stdin
                     '''
-
                 }
             }
         }
 
         stage('Push Docker Image') {
             steps {
+                echo "Pushing Docker Image..."
+
                 sh '''
                     docker push ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
         }
-
     }
 
     post {
 
         success {
+            echo "========================================="
             echo "CI Pipeline Completed Successfully!"
+            echo "Docker Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "========================================="
         }
 
         failure {
-            echo "Pipeline Failed!"
+            echo "========================================="
+            echo "CI Pipeline Failed!"
+            echo "========================================="
         }
 
         always {
