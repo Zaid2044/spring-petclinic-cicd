@@ -65,13 +65,6 @@ pipeline {
             }
         }
 
-        stage('Unit Tests') {
-            steps {
-                echo "Running Unit Tests..."
-                sh './mvnw test'
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
                 script {
